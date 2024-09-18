@@ -1,162 +1,132 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+import random
+import re
+from datetime import datetime
+import spacy
+from textblob import TextBlob
+from collections import Counter
+from twilio.rest import Client
 
-# C extensions
-*.so
+# Load Spacy's small English model for Named Entity Recognition
+nlp = spacy.load('en_core_web_sm')
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+# Twilio API credentials (replace with your actual credentials)
+account_sid = 'ACe2eac9b1ccb7556df7ee92ba2d0658d7'
+auth_token = '06b1210263feda5bb4cad4d11c0c9352'
+twilio_whatsapp_number = 'whatsapp:+17625839557'
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+# Function to fetch WhatsApp messages from Twilio API
+def get_whatsapp_messages(account_sid, auth_token):
+    client = Client(account_sid, auth_token)
+    messages = client.messages.list(limit=100)  # Fetch up to 100 messages
+    chat_data = []
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+    for message in messages:
+        # Filter messages to exclude automated replies and messages from the Twilio number
+        if message.from_ and 'whatsapp' in message.from_ and 'whatsapp:+14155238886' not in message.from_:
+            chat_data.append({
+                "timestamp": message.date_sent.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                "sender": message.from_,
+                "message": message.body
+            })
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-cover/
+    return chat_data
 
-# Translations
-*.mo
-*.pot
+# Function to count occurrences of keywords in a sentence
+def keyword_match(sentence, keywords):
+    words = sentence.lower().split()
+    keyword_count = {}
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
+    for word in words:
+        if word in keywords:
+            if word in keyword_count:
+                keyword_count[word] += 1
+            else:
+                keyword_count[word] = 1
 
-# Flask stuff:
-instance/
-.webassets-cache
+    return keyword_count
 
-# Scrapy stuff:
-.scrapy
+# List of keywords related to drug usage
+keywords = [
+    "drugs", "alcohol", "nicotine", "marijuana", "cocaine", "heroin", "methamphetamine", "prescription",
+    "opioids", "benzodiazepines", "mdma", "lsd", "valium", "xanax", "kilos", "weed", "blow", "crack", "dope",
+    "ecstasy", "molly", "speed", "smack", "ice", "pot", "acid", "maal", "phukenge", "snow", "foggy"
+]
 
-# Sphinx documentation
-docs/_build/
+# Function to determine alert level based on the count of keyword matches
+def get_alert_level(count):
+    if count < 2:
+        return "\033[92m"  # Green (Low Alert)
+    elif count < 4:
+        return "\033[93m"  # Yellow (Medium Alert)
+    else:
+        return "\033[91m"  # Red (High Alert)
 
-# PyBuilder
-.pybuilder/
-target/
+# Function for NLP analysis including sentiment analysis and named entity recognition
+def analyze_nlp(text):
+    if text.strip():  # Ensure text is not empty or whitespace
+        blob = TextBlob(text)
+        sentiment = blob.sentiment.polarity  # Sentiment score (-1 to 1)
 
-# Jupyter Notebook
-.ipynb_checkpoints
+        doc = nlp(text)
+        entities = [(ent.text, ent.label_) for ent in doc.ents]  # Extract named entities
 
-# IPython
-profile_default/
-ipython_config.py
+        return sentiment, entities
+    return 0, []  # Return neutral sentiment and no entities for empty messages
 
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
+# Function to analyze conversations with metadata and NLP features
+def analyze_conversations(metadata_list, person):
+    keyword_count = Counter()
+    print(f"\nAnalyzing conversations of {person}:")
 
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
+    # Skip the last 5 conversations
+    messages_to_analyze = metadata_list[:-5]
 
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
+    for metadata in messages_to_analyze:
+        timestamp = metadata['timestamp']
+        sender = metadata['sender']
+        message = metadata['message']
 
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#pdm.lock
-#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
-#   in version control.
-#   https://pdm.fming.dev/latest/usage/project/#working-with-version-control
-.pdm.toml
-.pdm-python
-.pdm-build/
+        # Analyze messages from specified senders
+        if sender in ['whatsapp:+918109576579', 'whatsapp:+14155238886']:
+            sentiment, entities = analyze_nlp(message)
 
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
+            # Skip messages with a sentiment score of 0.00 or specific phrases
+            if sentiment != 0.00 and "join circus-ahead" not in message.lower() and "stop" not in message.lower():
+                print(f"\033[94mTime: {timestamp}\033[0m")  # Blue color for time
+                print(f"\033[94mSender: {sender}\033[0m")  # Blue color for sender
+                print(f"Message: {message}")
+                print(f"\033[94mSentiment Score: {sentiment:.2f}\033[0m")  # Blue color for sentiment score
+                print(f"Entities: {entities}")
+                print("-" * 50)
 
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
+                # Perform keyword matching
+                keyword_result = keyword_match(message, keywords)
+                keyword_count.update(keyword_result)
 
-# SageMath parsed files
-*.sage.py
+    # Print keyword match counts with alert levels
+    print(f"Suspected keyword matches: {len(keyword_count)}")
+    for keyword, count in keyword_count.items():
+        alert_level = get_alert_level(count)
+        print(f"{alert_level}{keyword.capitalize()} : {count} times\033[0m")
 
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+# Fetch WhatsApp messages from Twilio
+chat_data = get_whatsapp_messages(account_sid, auth_token)
 
-# Spyder project settings
-.spyderproject
-.spyproject
+# If messages are fetched, analyze them
+if chat_data:
+    analyze_conversations(chat_data, "Jamie and Alex")
+else:
+    print("No messages found.")
 
-# Rope project settings
-.ropeproject
+# Function to generate random IP addresses
+def generate_random_ip():
+    return '.'.join(str(random.randint(0, 255)) for _ in range(4))
 
-# mkdocs documentation
-/site
+# Generate random metadata for demonstration purposes
+p1 = generate_random_ip()
+p2 = generate_random_ip()
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
+print("\nIP ADDRESS OF PERSON 1: ", p1)
+print("IP ADDRESS OF PERSON 2: ", p2)
+print("PHONE NUMBER OF PERSON 1: +918109576579")
+print("PHONE NUMBER OF PERSON 2: +14155238886")
