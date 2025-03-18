@@ -10,8 +10,8 @@ from twilio.rest import Client
 nlp = spacy.load('en_core_web_sm')
 
 # Twilio API credentials (replace with your actual credentials)
-account_sid = 'ACe2eac9b1ccb7556df7ee92ba2d0658d7'
-auth_token = '06b1210263feda5bb4cad4d11c0c9352'
+account_sid = ''
+auth_token = ''
 twilio_whatsapp_number = 'whatsapp:+17625839557'
 
 # Function to fetch WhatsApp messages from Twilio API
